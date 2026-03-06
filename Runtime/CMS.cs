@@ -207,6 +207,7 @@ namespace Shosho.CMS
             else
             {
                 Debug.LogError("Failed to fetch " + endpoint + " from CMS: " + request.error);
+                Debug.Log("Request URL was: " + requestURL);
                 yield break;
                 }
 
