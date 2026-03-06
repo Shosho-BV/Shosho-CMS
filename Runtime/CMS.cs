@@ -61,18 +61,23 @@ namespace Shosho.CMS
 
         public static IEnumerator Sync()
         {
-            cmsSettings = JsonConvert.DeserializeObject<CMSSettings>(File.ReadAllText(cmsSettingsPath));
+
+
             if (isSyncing)
             {
                 Debug.LogWarning("Already syncing CMS, please wait for the current sync to finish before starting a new one.");
                 yield break;
             }
 
+            cmsSettings = JsonConvert.DeserializeObject<CMSSettings>(File.ReadAllText(cmsSettingsPath));
+
             if (cmsSettings == null)
             {
                 Debug.LogError("Failed to sync CMS, no cms settings set");
                 yield break;
             }
+
+            apiURL = cmsSettings.baseUrl + "/api";
 
             Debug.Log("Syncing cms: " + apiURL);
             Debug.Log("Previous sync moment: " + cmsSettings.lastsync);
