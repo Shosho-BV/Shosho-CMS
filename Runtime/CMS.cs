@@ -61,8 +61,8 @@ namespace Shosho.CMS
 
         public static IEnumerator Sync()
         {
-
-            if(isSyncing)
+            cmsSettings = JsonConvert.DeserializeObject<CMSSettings>(File.ReadAllText(cmsSettingsPath));
+            if (isSyncing)
             {
                 Debug.LogWarning("Already syncing CMS, please wait for the current sync to finish before starting a new one.");
                 yield break;
