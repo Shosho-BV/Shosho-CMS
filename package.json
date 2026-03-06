@@ -1,0 +1,16 @@
+{
+  "name": "nl.shosho.cms",
+  "version": "1.0.2",
+  "displayName": "Content Management System",
+  "description": "Plugin that syncs content with a Strapi CMS",
+  "unity": "2020.3",
+  "author": {
+    "name": "Oscar Wieland",
+    "email": "oscar@shosho.nl",
+    "url": "https://shosho.nl"
+  },
+  "dependencies": {
+    "com.unity.editorcoroutines": "1.0.1"
+    "com.unity.nuget.newtonsoft-json"
+  }
+}

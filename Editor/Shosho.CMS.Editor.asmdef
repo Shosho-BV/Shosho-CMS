@@ -1,0 +1,19 @@
+{
+    "name": "Shosho.CMS.Editor",
+    "rootNamespace": "Shosho.CMS",
+    "references": [
+        "GUID:478a2357cc57436488a56e564b08d223",
+        "GUID:48663ae83ebb5b549a0a98826f8fd39e"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
