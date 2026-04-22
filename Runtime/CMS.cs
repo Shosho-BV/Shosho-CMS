@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 #if UNITY_EDITOR
 using UnityEditor;
 using Unity.EditorCoroutines.Editor;
@@ -31,6 +32,8 @@ namespace Shosho.CMS
 
         private static List<string> languageCodes = new List<string>();
 
+        private static readonly Regex DocumentIdRegex = new Regex(@"^[a-z0-9]{20,30}\.json$", RegexOptions.Compiled);
+
 
 #if UNITY_EDITOR
         [InitializeOnLoadMethodAttribute]
@@ -52,7 +55,7 @@ namespace Shosho.CMS
 #endif
             }
 
-            localFilePath = Application.persistentDataPath + '/' + "content";
+            localFilePath = Application.persistentDataPath + '/' + cmsSettings.localFileDir;
             apiURL = cmsSettings.baseUrl + "/api";
             if (cmsSettings.lastsync == null)
                 cmsSettings.lastsync = "1970-01-01T00:00:00.000Z";
@@ -219,8 +222,6 @@ namespace Shosho.CMS
                     
         }
 
- 
-
         private static IEnumerator FetchPage(int page, string endpoint)
         {
             string requestURL = $"{apiURL}/{endpoint}?populate=*&pagination[page]={page}&pagination[pageSize]=100&filters[updatedAt][$gt]={cmsSettings.lastsync}&sort=updatedAt:asc";
@@ -278,9 +279,9 @@ namespace Shosho.CMS
         {
             List<string> filesToCheck = new List<string>();
 
-                string requestURL = $"{apiURL}/{endpoint}?pagination[pageSize]=100&fields[0]=documentId";
+            string requestURL = $"{apiURL}/{endpoint}?pagination[pageSize]=100&fields[0]=documentId";
 
-                UnityWebRequest request = UnityWebRequest.Get(requestURL);
+            UnityWebRequest request = UnityWebRequest.Get(requestURL);
             request.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
             yield return request.SendWebRequest();
 
@@ -296,8 +297,8 @@ namespace Shosho.CMS
                     {
                         string pagerequestURL = $"{apiURL}/{endpoint}?pagination[page]={i}&pagination[pageSize]=100&fields[0]=documentId";
                         UnityWebRequest pagerequest = UnityWebRequest.Get(pagerequestURL);
-                    pagerequest.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
-                    yield return pagerequest.SendWebRequest();
+                        pagerequest.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
+                        yield return pagerequest.SendWebRequest();
                         if (pagerequest.result == UnityWebRequest.Result.Success)
                         {
                             string pagejsonResponse = pagerequest.downloadHandler.text;
@@ -329,7 +330,7 @@ namespace Shosho.CMS
 
                 string filename = $"{file}.json";
                 string filepath = $"{localFilePath}/{endpoint}/{filename}";
-
+     
                 if (!File.Exists(filepath))
                 {
                     Debug.Log("Fetching missing item: " + file);
@@ -351,6 +352,13 @@ namespace Shosho.CMS
             //delete local files not in remote CMS
             foreach (string f in Directory.GetFiles($"{localFilePath}/{endpoint}"))
             {
+                string filename = Path.GetFileName(f);
+                if (!IsDocumentFile(filename))
+                {
+                    Debug.LogWarning($"Unusual file detected : {f}");
+                    continue;
+                }
+
                 string localFileName = Path.GetFileNameWithoutExtension(f);
                 if (!filesToCheck.Contains(localFileName))
                 {
@@ -370,6 +378,10 @@ namespace Shosho.CMS
             }
         }
 
+        public static bool IsDocumentFile(string filename)
+        {
+            return DocumentIdRegex.IsMatch(filename);
+        }
 
         private static IEnumerator DownloadFile(string url, string path)
         {
@@ -439,6 +451,15 @@ namespace Shosho.CMS
             var startTime = Time.realtimeSinceStartup;
             UnityWebRequest.Result requestResult = UnityWebRequest.Result.InProgress;
             cmsSettings.baseUrlStatus = urlStatus.Validating;
+            Debug.Log("Base URL: " + cmsSettings.baseUrl);
+            if (cmsSettings.baseUrl.EndsWith('/'))
+            {
+                Debug.LogError("Base URL should not end with a slash.");
+                cmsSettings.baseUrlStatus = urlStatus.Invalid;
+                yield break;
+            }
+   
+
             while (!connectedToServer && Time.realtimeSinceStartup - startTime < maxTime)
             {
                 UnityWebRequest request = UnityWebRequest.Get(cmsSettings.baseUrl);

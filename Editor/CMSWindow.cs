@@ -184,6 +184,8 @@ namespace Shosho.CMS
                     endpoint.status = urlStatus.Unknown;
                 }
                 cmsSettings.baseUrlStatus = urlStatus.Unknown;
+                char[] trimChars = new char[] { '/', '\\'};
+                newBaseUrl = newBaseUrl.TrimEnd(trimChars);
                 cmsSettings.baseUrl = newBaseUrl;
                 CMS.SaveSettings();
             }
