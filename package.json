@@ -1,6 +1,6 @@
 {
   "name": "nl.shosho.cms",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "displayName": "Content Management System",
   "description": "Plugin that syncs content with a Strapi CMS",
   "unity": "2020.3",
