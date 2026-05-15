@@ -31,6 +31,7 @@ namespace Shosho.CMS
         private static string maxUpdatedAt;
 
         private static List<string> languageCodes = new List<string>();
+        private static Dictionary<string, string> _populateStrings = new Dictionary<string, string>();
 
         private static readonly Regex DocumentIdRegex = new Regex(@"^[a-z0-9]{20,30}\.json$", RegexOptions.Compiled);
 
@@ -111,6 +112,9 @@ namespace Shosho.CMS
             }
 
             yield return FetchLanguageOptions();
+
+            var endpointNames = cmsSettings.restEndpoints.Select(e => e.name).ToList();
+            yield return CMSSchema.BuildPopulateStrings(cmsSettings.baseUrl, cmsSettings.apiToken, endpointNames, result => _populateStrings = result);
 
             for(int i=0; i< cmsSettings.restEndpoints.Count;i++)
             {
@@ -194,7 +198,8 @@ namespace Shosho.CMS
 
 
 
-            string requestURL = $"{apiURL}/{endpoint}?populate=*&pagination[pageSize]=100&filters[updatedAt][$gt]={cmsSettings.lastsync}&sort=updatedAt:asc";
+            string pop = _populateStrings.TryGetValue(endpoint, out var ps1) ? ps1 : "populate=*";
+            string requestURL = $"{apiURL}/{endpoint}?{pop}&pagination[pageSize]=100&filters[updatedAt][$gt]={cmsSettings.lastsync}&sort=updatedAt:asc";
 
             UnityWebRequest request = UnityWebRequest.Get(requestURL);
             request.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
@@ -224,7 +229,8 @@ namespace Shosho.CMS
 
         private static IEnumerator FetchPage(int page, string endpoint)
         {
-            string requestURL = $"{apiURL}/{endpoint}?populate=*&pagination[page]={page}&pagination[pageSize]=100&filters[updatedAt][$gt]={cmsSettings.lastsync}&sort=updatedAt:asc";
+            string pop = _populateStrings.TryGetValue(endpoint, out var ps2) ? ps2 : "populate=*";
+            string requestURL = $"{apiURL}/{endpoint}?{pop}&pagination[page]={page}&pagination[pageSize]=100&filters[updatedAt][$gt]={cmsSettings.lastsync}&sort=updatedAt:asc";
             JArray jArray;
             UnityWebRequest request = UnityWebRequest.Get(requestURL);
             request.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
@@ -334,7 +340,8 @@ namespace Shosho.CMS
                 if (!File.Exists(filepath))
                 {
                     Debug.Log("Fetching missing item: " + file);
-                    UnityWebRequest requestMissing = UnityWebRequest.Get($"{apiURL}/{endpoint}/{file}?populate=*");
+                    string popMissing = _populateStrings.TryGetValue(endpoint, out var ps3) ? ps3 : "populate=*";
+                    UnityWebRequest requestMissing = UnityWebRequest.Get($"{apiURL}/{endpoint}/{file}?{popMissing}");
                     requestMissing.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
                     yield return requestMissing.SendWebRequest();
                     if (requestMissing.result == UnityWebRequest.Result.Success)
