@@ -53,8 +53,12 @@ namespace Shosho.CMS
             {
 #if UNITY_EDITOR
                 cmsSettings = new CMSSettings();
+#elif UNITY_STANDALONE
+                Debug.LogError($"Unable to initialize CMS, settings file is missing from: {cmsSettingsPath}");
+                return;
 #endif
             }
+
 
             localFilePath = Application.persistentDataPath + '/' + cmsSettings.localFileDir;
             apiURL = cmsSettings.baseUrl + "/api";
@@ -201,30 +205,36 @@ namespace Shosho.CMS
             string pop = _populateStrings.TryGetValue(endpoint, out var ps1) ? ps1 : "populate=*";
             string requestURL = $"{apiURL}/{endpoint}?{pop}&pagination[pageSize]=100&filters[updatedAt][$gt]={cmsSettings.lastsync}&sort=updatedAt:asc";
 
-            UnityWebRequest request = UnityWebRequest.Get(requestURL);
-            request.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
-            yield return request.SendWebRequest();
-
-            if (request.result == UnityWebRequest.Result.Success)
+            using (UnityWebRequest request = UnityWebRequest.Get(requestURL))
             {
-                string jsonResponse = request.downloadHandler.text;
-                JObject jObject = ParseNoDates(jsonResponse);
-                JObject metaData = jObject["meta"].Value<JObject>();
-                int pagecount = metaData["pagination"]["pageCount"].Value<int>();
+                request.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
+                yield return request.SendWebRequest();
 
-                for (int i = 1; i <= pagecount; i++)
+                if (request.result == UnityWebRequest.Result.Success)
                 {
-                    yield return FetchPage(i, endpoint);
-                }
-            }
-            else
-            {
-                Debug.LogError("Failed to fetch " + endpoint + " from CMS: " + request.error);
-                Debug.Log("Request URL was: " + requestURL);
-                yield break;
-                }
+                    string jsonResponse = request.downloadHandler.text;
+                    JObject jObject = ParseNoDates(jsonResponse);
+                    JObject metaData = jObject["meta"].Value<JObject>();
+                    if (metaData == null)
+                    {
+                        Debug.LogError($"Failed to fetch {endpoint} metadata");
+                        yield break;
+                    }
+    
+                    int pagecount = metaData["pagination"]["pageCount"].Value<int>();
 
-                    
+                    for (int i = 1; i <= pagecount; i++)
+                    {
+                        yield return FetchPage(i, endpoint);
+                    }
+                }
+                else
+                {
+                    Debug.LogError("Failed to fetch " + endpoint + " from CMS: " + request.error);
+                    Debug.Log("Request URL was: " + requestURL);
+                    yield break;
+                }
+            }               
         }
 
         private static IEnumerator FetchPage(int page, string endpoint)
@@ -232,40 +242,49 @@ namespace Shosho.CMS
             string pop = _populateStrings.TryGetValue(endpoint, out var ps2) ? ps2 : "populate=*";
             string requestURL = $"{apiURL}/{endpoint}?{pop}&pagination[page]={page}&pagination[pageSize]=100&filters[updatedAt][$gt]={cmsSettings.lastsync}&sort=updatedAt:asc";
             JArray jArray;
-            UnityWebRequest request = UnityWebRequest.Get(requestURL);
-            request.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
-            yield return request.SendWebRequest();
-
-            if (request.result == UnityWebRequest.Result.Success)
+            using (UnityWebRequest request = UnityWebRequest.Get(requestURL))
             {
-                string jsonResponse = request.downloadHandler.text;
+                request.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
+                yield return request.SendWebRequest();
 
-                JObject jObject = ParseNoDates(jsonResponse);
-                jArray = jObject["data"].Value<JArray>();
-
-                int progress = 0;
-                List<string> savedItems = new List<string>();
-                foreach (JObject item in jArray)
+                if (request.result == UnityWebRequest.Result.Success)
                 {
-                    string filename = $"{item["documentId"].Value<string>()}.json";
-                    string filepath = $"{localFilePath}/{endpoint}/{filename}";
-                   
-                    yield return SaveItem(filepath, item);
-                    DateTime updatedAt = DateTime.Parse(item["updatedAt"].Value<string>());
-                    DateTime currentUpdatedAt = DateTime.Parse(maxUpdatedAt);
-                    if (updatedAt > currentUpdatedAt)
+                    string jsonResponse = request.downloadHandler.text;
+
+                    JObject jObject = ParseNoDates(jsonResponse);
+                    jArray = jObject["data"].Value<JArray>();
+
+                    if (jArray == null)
                     {
-                        maxUpdatedAt = item["updatedAt"].Value<string>();
+                        Debug.LogError($"Failed to fetch page: {page} from {endpoint}, data is null");
+                        yield break;
                     }
- 
-                    progress++;
-                    yield return null;
+
+
+                    int progress = 0;
+                    List<string> savedItems = new List<string>();
+                    foreach (JObject item in jArray)
+                    {
+                        string filename = $"{item["documentId"].Value<string>()}.json";
+                        string filepath = $"{localFilePath}/{endpoint}/{filename}";
+
+                        yield return SaveItem(filepath, item);
+                        DateTime updatedAt = DateTime.Parse(item["updatedAt"].Value<string>());
+                        DateTime currentUpdatedAt = DateTime.Parse(maxUpdatedAt);
+                        if (updatedAt > currentUpdatedAt)
+                        {
+                            maxUpdatedAt = item["updatedAt"].Value<string>();
+                        }
+
+                        progress++;
+                        yield return null;
+                    }
                 }
-            }
-            else
-            {
-                Debug.LogError("Failed to fetch page: " + requestURL + " from CMS: " + request.error);
-                yield break;
+                else
+                {
+                    Debug.LogError("Failed to fetch page: " + requestURL + " from CMS: " + request.error);
+                    yield break;
+                }
             }
         }
 
@@ -287,9 +306,10 @@ namespace Shosho.CMS
 
             string requestURL = $"{apiURL}/{endpoint}?pagination[pageSize]=100&fields[0]=documentId";
 
-            UnityWebRequest request = UnityWebRequest.Get(requestURL);
-            request.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
-            yield return request.SendWebRequest();
+            using (UnityWebRequest request = UnityWebRequest.Get(requestURL))
+            {
+                request.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
+                yield return request.SendWebRequest();
 
                 //fetch all ids from remote CMS
                 if (request.result == UnityWebRequest.Result.Success)
@@ -297,30 +317,43 @@ namespace Shosho.CMS
                     string jsonResponse = request.downloadHandler.text;
                     JObject jObject = ParseNoDates(jsonResponse);
                     JObject metaData = jObject["meta"].Value<JObject>();
+                    if(metaData == null)
+                    {
+                        Debug.LogError($"Failed to retrievie metadata from {endpoint}");
+                        yield break;
+                    }
+
                     int pagecount = metaData["pagination"]["pageCount"].Value<int>();
 
                     for (int i = 1; i <= pagecount; i++)
                     {
                         string pagerequestURL = $"{apiURL}/{endpoint}?pagination[page]={i}&pagination[pageSize]=100&fields[0]=documentId";
-                        UnityWebRequest pagerequest = UnityWebRequest.Get(pagerequestURL);
-                        pagerequest.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
-                        yield return pagerequest.SendWebRequest();
-                        if (pagerequest.result == UnityWebRequest.Result.Success)
+                        using (UnityWebRequest pagerequest = UnityWebRequest.Get(pagerequestURL))
                         {
-                            string pagejsonResponse = pagerequest.downloadHandler.text;
-                            JObject pagejObject = ParseNoDates(pagejsonResponse);
-                            JArray jArrayPage = pagejObject["data"].Value<JArray>();
-                            foreach (JObject item in jArrayPage)
+                            pagerequest.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
+                            yield return pagerequest.SendWebRequest();
+                            if (pagerequest.result == UnityWebRequest.Result.Success)
                             {
-                                string file = $"{item["documentId"].ToString()}";
-                                filesToCheck.Add(file);
+                                string pagejsonResponse = pagerequest.downloadHandler.text;
+                                JObject pagejObject = ParseNoDates(pagejsonResponse);
+                                JArray jArrayPage = pagejObject["data"].Value<JArray>();
+                                if(jArrayPage == null)
+                                {
+                                    Debug.LogError($"Failed to compare data for page {i}");
+                                    continue;
+                                }
+                                foreach (JObject item in jArrayPage)
+                                {
+                                    string file = $"{item["documentId"].ToString()}";
+                                    filesToCheck.Add(file);
+                                }
                             }
-                        }
-                        else
-                        {
-                            Debug.LogError("Failed to fetch page: " + pagerequestURL + " from CMS: " + pagerequest.error);
-                            yield break;
-                        }
+                            else
+                            {
+                                Debug.LogError("Failed to fetch page: " + pagerequestURL + " from CMS: " + pagerequest.error);
+                                yield break;
+                            }
+                        }                      
                     }
                 }
                 else
@@ -328,6 +361,8 @@ namespace Shosho.CMS
                     Debug.LogError("Failed to fetch " + endpoint + " from CMS: " + request.error);
                     yield break;
                 }
+            }
+          
             
 
             //check for missing local files
@@ -341,18 +376,24 @@ namespace Shosho.CMS
                 {
                     Debug.Log("Fetching missing item: " + file);
                     string popMissing = _populateStrings.TryGetValue(endpoint, out var ps3) ? ps3 : "populate=*";
-                    UnityWebRequest requestMissing = UnityWebRequest.Get($"{apiURL}/{endpoint}/{file}?{popMissing}");
-                    requestMissing.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
-                    yield return requestMissing.SendWebRequest();
-                    if (requestMissing.result == UnityWebRequest.Result.Success)
+                    using (UnityWebRequest requestMissing = UnityWebRequest.Get($"{apiURL}/{endpoint}/{file}?{popMissing}"))
                     {
-                        string jsonResponse = requestMissing.downloadHandler.text;
-                        JObject jObject = ParseNoDates(jsonResponse);
-                        var item = jObject["data"].Value<JObject>();
+                        requestMissing.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
+                        yield return requestMissing.SendWebRequest();
+                        if (requestMissing.result == UnityWebRequest.Result.Success)
+                        {
+                            string jsonResponse = requestMissing.downloadHandler.text;
+                            JObject jObject = ParseNoDates(jsonResponse);
+                            var item = jObject["data"].Value<JObject>();
+                            if (item == null)
+                            {
+                                Debug.LogError($"Failed to parse missing file: {file}, invalid json from server");
+                                continue;
+                            }
 
-                        yield return SaveItem(filepath, item);
+                            yield return SaveItem(filepath, item);
+                        }
                     }
-
                 }
             }
 
@@ -469,25 +510,28 @@ namespace Shosho.CMS
 
             while (!connectedToServer && Time.realtimeSinceStartup - startTime < maxTime)
             {
-                UnityWebRequest request = UnityWebRequest.Get(cmsSettings.baseUrl);
-                yield return request.SendWebRequest();
-                if (request.result == UnityWebRequest.Result.Success)
+                using (UnityWebRequest request = UnityWebRequest.Get(cmsSettings.baseUrl))
                 {
-                    cmsSettings.baseUrlStatus = urlStatus.Valid;
-                    connectedToServer = true;
-                    Debug.Log("Succes");
-                    yield break;
-                }
-                else
-                {
-                    requestResult = request.result;
+                    yield return request.SendWebRequest();
+                    if (request.result == UnityWebRequest.Result.Success)
+                    {
+                        cmsSettings.baseUrlStatus = urlStatus.Valid;
+                        connectedToServer = true;
+                        Debug.Log("Succes");
+                        yield break;
+                    }
+                    else
+                    {
+                        requestResult = request.result;
 #if UNITY_EDITOR
-                    yield return new EditorWaitForSeconds(1f);
+                        yield return new EditorWaitForSeconds(1f);
 #endif
 #if UNITY_STANDALONE
-                    yield return new WaitForSeconds(1f);
+                        yield return new WaitForSeconds(1f);
 #endif
+                    }
                 }
+
             }
             Debug.LogError("Failed to connect to server: " + requestResult);
             cmsSettings.baseUrlStatus = urlStatus.Invalid;
@@ -514,25 +558,27 @@ namespace Shosho.CMS
             cmsSettings.languageUrlStatus = urlStatus.Validating;
             while (!connectedToServer && Time.realtimeSinceStartup - startTime < maxTime)
             {
-                UnityWebRequest request = UnityWebRequest.Get(cmsSettings.baseUrl + "/api/i18n/locales");
-                request.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
-                yield return request.SendWebRequest();
-                if (request.result == UnityWebRequest.Result.Success)
+                using (UnityWebRequest request = UnityWebRequest.Get(cmsSettings.baseUrl + "/api/i18n/locales"))
                 {
-                    cmsSettings.languageUrlStatus = urlStatus.Valid;
-                    connectedToServer = true;
-                    Debug.Log("Succes");
-                    yield break;
-                }
-                else
-                {
-                    requestResult = request.result;
+                    request.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
+                    yield return request.SendWebRequest();
+                    if (request.result == UnityWebRequest.Result.Success)
+                    {
+                        cmsSettings.languageUrlStatus = urlStatus.Valid;
+                        connectedToServer = true;
+                        Debug.Log("Succes");
+                        yield break;
+                    }
+                    else
+                    {
+                        requestResult = request.result;
 #if UNITY_EDITOR
-                    yield return new EditorWaitForSeconds(1f);
+                        yield return new EditorWaitForSeconds(1f);
 #endif
 #if UNITY_STANDALONE
-                    yield return new WaitForSeconds(1f);
+                        yield return new WaitForSeconds(1f);
 #endif
+                    }
                 }
             }
             Debug.LogError("Failed to connect to server: " + requestResult);
@@ -549,26 +595,29 @@ namespace Shosho.CMS
             string error = "";
             while (!connectedToServer && Time.realtimeSinceStartup - startTime < maxTime)
             {
-                UnityWebRequest request = UnityWebRequest.Get(cmsSettings.baseUrl + "/api/" + endpoint.name);
-                request.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
-                yield return request.SendWebRequest();
-                if (request.result == UnityWebRequest.Result.Success)
+                using (UnityWebRequest request = UnityWebRequest.Get(cmsSettings.baseUrl + "/api/" + endpoint.name))
                 {
-                    endpoint.status = urlStatus.Valid;
-                    connectedToServer = true;
-                    Debug.Log($"Connected to endpoint {endpoint.name}");
-                    yield break;
-                }
-                else
-                {
-                    error = request.error;
+                    request.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
+                    yield return request.SendWebRequest();
+                    if (request.result == UnityWebRequest.Result.Success)
+                    {
+                        endpoint.status = urlStatus.Valid;
+                        connectedToServer = true;
+                        Debug.Log($"Connected to endpoint {endpoint.name}");
+                        yield break;
+                    }
+                    else
+                    {
+                        error = request.error;
 #if UNITY_EDITOR
-                    yield return new EditorWaitForSeconds(1f);
+                        yield return new EditorWaitForSeconds(1f);
 #endif
 #if UNITY_STANDALONE
-                    yield return new WaitForSeconds(1f);
+                        yield return new WaitForSeconds(1f);
 #endif
+                    }
                 }
+              
             }
             Debug.LogError($"Failed to connect to endpoint {endpoint.name}: {error}");
             endpoint.status = urlStatus.Invalid;
