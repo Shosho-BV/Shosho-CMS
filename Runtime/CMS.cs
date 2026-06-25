@@ -35,6 +35,8 @@ namespace Shosho.CMS
 
         private static readonly Regex DocumentIdRegex = new Regex(@"^[a-z0-9]{20,30}\.json$", RegexOptions.Compiled);
 
+        private static HashSet<string> _updatedDocumentIds = new HashSet<string>();
+
 
 #if UNITY_EDITOR
         [InitializeOnLoadMethodAttribute]
@@ -69,8 +71,6 @@ namespace Shosho.CMS
 
         public static IEnumerator Sync()
         {
-
-
             if (isSyncing)
             {
                 Debug.LogWarning("Already syncing CMS, please wait for the current sync to finish before starting a new one.");
@@ -106,6 +106,8 @@ namespace Shosho.CMS
                 yield break;
             }
 
+            _updatedDocumentIds.Clear();
+
             isSyncing = true;
 
             progress = 0.0f;
@@ -132,9 +134,10 @@ namespace Shosho.CMS
                 }
 
                 yield return Fetch(endpoint.name);
+  
                 yield return DeleteLocalFilesMissingFromRemote(endpoint.name);
             }
-
+            yield return RedownloadStaleEmbeds();
             Debug.Log("Sync complete");
             cmsSettings.lastsync = maxUpdatedAt;
             SaveSettings();
@@ -269,6 +272,7 @@ namespace Shosho.CMS
                         string filepath = $"{localFilePath}/{endpoint}/{filename}";
 
                         yield return SaveItem(filepath, item);
+                        _updatedDocumentIds.Add(item["documentId"].Value<string>());
                         DateTime updatedAt = DateTime.Parse(item["updatedAt"].Value<string>());
                         DateTime currentUpdatedAt = DateTime.Parse(maxUpdatedAt);
                         if (updatedAt > currentUpdatedAt)
@@ -633,6 +637,63 @@ namespace Shosho.CMS
             return JObject.Load(jr);
         }
 
+        private static IEnumerator RedownloadStaleEmbeds()
+        {
+            if (_updatedDocumentIds.Count == 0) yield break;
+
+            foreach (var endpoint in cmsSettings.restEndpoints)
+            {
+                string dir = localFilePath + '/' + endpoint.name;
+                if (!Directory.Exists(dir)) continue;
+
+                foreach (string filepath in Directory.GetFiles(dir, "*.json"))
+                {
+                    if (!IsDocumentFile(Path.GetFileName(filepath))) continue;
+
+                    string localDocId = Path.GetFileNameWithoutExtension(filepath);
+                    if (_updatedDocumentIds.Contains(localDocId)) continue;
+
+                    string json = File.ReadAllText(filepath);
+                    JObject jObject = ParseNoDates(json);
+                    if (!ContainsUpdatedDocumentId(jObject)) continue;
+
+                    string pop = _populateStrings.TryGetValue(endpoint.name, out var ps) ? ps : "populate=*";
+                    using (UnityWebRequest request = UnityWebRequest.Get($"{apiURL}/{endpoint.name}/{localDocId}?{pop}"))
+                    {
+                        request.SetRequestHeader("Authorization", "Bearer " + cmsSettings.apiToken);
+                        yield return request.SendWebRequest();
+                        if (request.result == UnityWebRequest.Result.Success)
+                        {
+                            JObject response = ParseNoDates(request.downloadHandler.text);
+                            JObject item = response["data"]?.Value<JObject>() ?? response;
+                            yield return SaveItem(filepath, item);
+                            Debug.Log($"[CMS] Re-downloaded {endpoint.name}/{localDocId} (embedded content changed)");
+                        }
+                    }
+                }
+            }
+        }
+
+        private static bool ContainsUpdatedDocumentId(JToken token)
+        {
+            if (token == null) return false;
+            if (token.Type == JTokenType.Object)
+            {
+                foreach (var prop in ((JObject)token).Properties())
+                {
+                    if (prop.Name == "documentId" && _updatedDocumentIds.Contains(prop.Value.Value<string>()))
+                        return true;
+                    if (ContainsUpdatedDocumentId(prop.Value))
+                        return true;
+                }
+            }
+            else if (token.Type == JTokenType.Array)
+            {
+                foreach (var item in (JArray)token)
+                    if (ContainsUpdatedDocumentId(item)) return true;
+            }
+            return false;
+        }
 
     }
 }
