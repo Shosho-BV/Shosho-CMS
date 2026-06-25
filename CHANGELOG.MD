@@ -1,4 +1,7 @@
 # Changelog
+
+## v0.2.1
+- [Fix] Embedded content now downloads correctly. Previously references to embedded content like components would not update correctly.
 ## v0.2.0
 - [Feature] Added support for Relation and Component fields (Nested content).
 - [Fix] changed all added using to all unitywebrequest so garbage collection correctly cleans up the requests
