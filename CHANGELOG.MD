@@ -1,5 +1,8 @@
 # Changelog
 
+
+## v0.2.2
+-[Fix] Strapi rejecting populate[image]=* resulting in a bad request error for image fields.
 ## v0.2.1
 - [Fix] Embedded content now downloads correctly. Previously references to embedded content like components would not update correctly.
 ## v0.2.0
@@ -11,6 +14,5 @@
 - [Fix] null fields in json files are now handeld better, encountering a null field should in most cases not cause a crash
 - [Fix] Incorrect deserialize functions in utility. The deserialize functions nolonger deserialize all endpoints but only a specified endpoint id or index.
 - [Fix] Files in the content folder that do not match the structure of the cms documentID are now ignored by the utility script. A warning is thrown when an unusual file is found.
-
 ## v0.1.0
  -  First release
