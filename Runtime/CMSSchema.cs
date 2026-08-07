@@ -107,7 +107,7 @@ namespace Shosho.CMS
                         break;
 
                     case "media":
-                        parts.Add($"{prefix}[{fieldName}]=*");
+                        parts.Add($"{prefix}[{fieldName}]=true");
                         break;
 
                     case "component":
