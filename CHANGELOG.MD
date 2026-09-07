@@ -1,6 +1,7 @@
 # Changelog
 
-
+## v0.2.3
+-[Fix] DeserializeToList no longer returns duplicates and leaves localizations intact.
 ## v0.2.2
 -[Fix] Strapi rejecting populate[image]=* resulting in a bad request error for image fields.
 ## v0.2.1
