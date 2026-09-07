@@ -514,10 +514,10 @@ namespace Shosho.CMS
 
             while (!connectedToServer && Time.realtimeSinceStartup - startTime < maxTime)
             {
-                using (UnityWebRequest request = UnityWebRequest.Get(cmsSettings.baseUrl))
+                using (UnityWebRequest request = UnityWebRequest.Get(cmsSettings.baseUrl +"/_health"))
                 {
                     yield return request.SendWebRequest();
-                    if (request.result == UnityWebRequest.Result.Success)
+                    if (request.responseCode == 204)
                     {
                         cmsSettings.baseUrlStatus = urlStatus.Valid;
                         connectedToServer = true;
